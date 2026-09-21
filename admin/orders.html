@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Quản lý Đơn hàng - Uông Bí GO</title>
+<link rel="icon" href="../favicon.ico" />
+<link rel="stylesheet" href="../css/style.css" />
+</head>
+<body>
+<div class="admin-layout">
+  <div class="admin-sidebar">
+    <div class="brand">🍱 Uông Bí GO</div>
+    <nav>
+      <a href="dashboard.html">📊 Tổng quan</a>
+      <a href="menu-management.html">🍜 Quản lý Menu</a>
+      <a href="orders.html" class="active">🧾 Quản lý Đơn hàng</a>
+    </nav>
+    <div class="logout-box">
+      <div style="font-size:13px; margin-bottom:10px;" id="userName"></div>
+      <button class="btn btn-outline btn-sm btn-block" id="btnLogout">Đăng xuất</button>
+    </div>
+  </div>
+
+  <div class="admin-main">
+    <div class="admin-topbar">
+      <div class="page-title" style="margin:0;">Lịch sử đơn hàng</div>
+      <select id="filterStatus" style="padding:8px 12px; border-radius:8px; border:1px solid var(--clr-border);">
+        <option value="">Tất cả trạng thái</option>
+        <option value="CHO_THANH_TOAN">Chờ thanh toán</option>
+        <option value="DA_THANH_TOAN">Đã thanh toán</option>
+        <option value="DANG_CHUAN_BI">Đang chuẩn bị</option>
+        <option value="SAN_SANG_NHAN">Sẵn sàng nhận</option>
+        <option value="HOAN_THANH">Hoàn thành</option>
+        <option value="DA_HUY">Đã hủy</option>
+      </select>
+    </div>
+    <div id="alertBox"></div>
+
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr><th>Mã đơn</th><th>Ngày đặt</th><th>Giờ nhận</th><th>Chi tiết món</th><th>Tổng tiền</th><th>Trạng thái</th></tr>
+        </thead>
+        <tbody id="ordersBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script src="../js/api.js"></script>
+<script>
+  const user = Auth.requireRole(["ROLE_ADMIN"]);
+  let allOrders = [];
+
+  if (user) {
+    document.getElementById("userName").textContent = user.hoTen;
+    document.getElementById("btnLogout").addEventListener("click", () => { Auth.clear(); goTo("index.html"); });
+    loadOrders();
+    document.getElementById("filterStatus").addEventListener("change", renderTable);
+  }
+
+  async function loadOrders() {
+    try {
+      allOrders = await apiFetch("/admin/don-hang");
+      renderTable();
+    } catch (err) {
+      document.getElementById("alertBox").innerHTML = `<div class="alert alert-error">${err.message}</div>`;
+    }
+  }
+
+  function renderTable() {
+    const filter = document.getElementById("filterStatus").value;
+    const orders = filter ? allOrders.filter((o) => o.trangThai === filter) : allOrders;
+    const tbody = document.getElementById("ordersBody");
+    tbody.innerHTML = orders.map((d) => {
+      const items = d.chiTietDonHangs.map((ct) => `${ct.tenMon} x${ct.soLuong}`).join(", ");
+      return `
+        <tr>
+          <td>${d.maDonRutGon || "#" + d.maDonHang}</td>
+          <td>${formatDateTime(d.ngayDat)}</td>
+          <td>${formatDateTime(d.thoiGianNhan)}</td>
+          <td style="max-width:280px;">${items}</td>
+          <td>${formatCurrency(d.tongTien)}</td>
+          <td>${statusPillHtml(d.trangThai)}</td>
+        </tr>
+      `;
+    }).join("") || `<tr><td colspan="6" class="text-muted" style="text-align:center;">Không có đơn hàng phù hợp</td></tr>`;
+  }
+</script>
+</body>
+</html>

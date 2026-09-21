@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Quản lý Menu - Uông Bí GO</title>
+<link rel="icon" href="../favicon.ico" />
+<link rel="stylesheet" href="../css/style.css" />
+</head>
+<body>
+<div class="admin-layout">
+  <div class="admin-sidebar">
+    <div class="brand">🍱 Uông Bí GO</div>
+    <nav>
+      <a href="dashboard.html">📊 Tổng quan</a>
+      <a href="menu-management.html" class="active">🍜 Quản lý Menu</a>
+      <a href="orders.html">🧾 Quản lý Đơn hàng</a>
+    </nav>
+    <div class="logout-box">
+      <div style="font-size:13px; margin-bottom:10px;" id="userName"></div>
+      <button class="btn btn-outline btn-sm btn-block" id="btnLogout">Đăng xuất</button>
+    </div>
+  </div>
+
+  <div class="admin-main">
+    <div class="admin-topbar">
+      <div class="page-title" style="margin:0;">Quản lý Menu</div>
+      <button class="btn btn-primary" id="btnNewMon">+ Thêm món mới</button>
+    </div>
+    <div id="alertBox"></div>
+
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr><th>Món ăn</th><th>Giá</th><th>Trạng thái</th><th style="width:200px;">Thao tác</th></tr>
+        </thead>
+        <tbody id="menuBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Modal them/sua mon -->
+<div id="monModal" class="modal-overlay hidden">
+  <div class="modal-box">
+    <h3 id="modalTitle">Thêm món mới</h3>
+    <input type="hidden" id="editMaMon" />
+    <div class="field">
+      <label>Tên món</label>
+      <input type="text" id="fTenMon" placeholder="VD: Cơm tấm sườn bì" />
+    </div>
+    <div class="field">
+      <label>Đơn giá (đ)</label>
+      <input type="number" id="fDonGia" min="1000" step="1000" placeholder="30000" />
+    </div>
+    <div class="field">
+      <label>Mô tả</label>
+      <textarea id="fMoTa" rows="2" placeholder="Mô tả ngắn về món ăn"></textarea>
+    </div>
+    <div class="field">
+      <label>URL hình ảnh (tùy chọn)</label>
+      <input type="text" id="fHinhAnh" placeholder="https://..." />
+    </div>
+    <div class="field" id="trangThaiField">
+      <label>Trạng thái</label>
+      <select id="fTrangThai">
+        <option value="CON_HANG">Còn hàng</option>
+        <option value="HET_HANG">Hết hàng</option>
+      </select>
+    </div>
+    <div id="modalAlert"></div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" id="btnCloseModal">Hủy</button>
+      <button class="btn btn-primary" id="btnSaveMon">Lưu</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal xac nhan xoa -->
+<div id="deleteModal" class="modal-overlay hidden">
+  <div class="modal-box">
+    <h3>Xác nhận xóa món</h3>
+    <p>Món ăn sẽ bị <b>ẩn khỏi menu</b> (xóa mềm), dữ liệu lịch sử đơn hàng cũ liên quan sẽ không bị ảnh hưởng.</p>
+    <div class="modal-actions">
+      <button class="btn btn-outline" id="btnCancelDelete">Hủy</button>
+      <button class="btn btn-danger" id="btnConfirmDelete">Xóa món</button>
+    </div>
+  </div>
+</div>
+
+<script src="../js/api.js"></script>
+<script>
+  const user = Auth.requireRole(["ROLE_ADMIN"]);
+  let pendingDeleteId = null;
+
+  if (user) {
+    document.getElementById("userName").textContent = user.hoTen;
+    document.getElementById("btnLogout").addEventListener("click", () => { Auth.clear(); goTo("../index.html"); });
+    loadMenu();
+  }
+
+  async function loadMenu() {
+    const alertBox = document.getElementById("alertBox");
+    try {
+      const items = await apiFetch("/admin/mon-an");
+      const tbody = document.getElementById("menuBody");
+      tbody.innerHTML = items.map((mon) => {
+        const isDeleted = mon.trangThai === "DA_XOA";
+        return `
+        <tr style="${isDeleted ? "opacity:.5;" : ""}">
+          <td>${mon.tenMon}${isDeleted ? ' <span class="text-muted" style="font-size:11.5px;">(đã ẩn)</span>' : ""}</td>
+          <td>${formatCurrency(mon.donGia)}</td>
+          <td>${isDeleted ? '<span class="badge badge-out">Đã xóa</span>' : (mon.trangThai === "CON_HANG" ? '<span class="badge badge-ok">Còn hàng</span>' : '<span class="badge badge-out">Hết hàng</span>')}</td>
+          <td>
+            ${isDeleted ? "" : `
+              <button class="btn btn-outline btn-sm" data-edit='${JSON.stringify(mon)}'>Sửa</button>
+              <button class="btn btn-danger btn-sm" data-delete="${mon.maMon}">Xóa</button>
+            `}
+          </td>
+        </tr>`;
+      }).join("");
+
+      tbody.querySelectorAll("[data-edit]").forEach((btn) => {
+        btn.addEventListener("click", () => openEditModal(JSON.parse(btn.dataset.edit)));
+      });
+      tbody.querySelectorAll("[data-delete]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          pendingDeleteId = btn.dataset.delete;
+          document.getElementById("deleteModal").classList.remove("hidden");
+        });
+      });
+    } catch (err) {
+      alertBox.innerHTML = `<div class="alert alert-error">${err.message}</div>`;
+    }
+  }
+
+  const monModal = document.getElementById("monModal");
+  function resetForm() {
+    document.getElementById("editMaMon").value = "";
+    document.getElementById("fTenMon").value = "";
+    document.getElementById("fDonGia").value = "";
+    document.getElementById("fMoTa").value = "";
+    document.getElementById("fHinhAnh").value = "";
+    document.getElementById("fTrangThai").value = "CON_HANG";
+    document.getElementById("modalAlert").innerHTML = "";
+  }
+
+  document.getElementById("btnNewMon").addEventListener("click", () => {
+    resetForm();
+    document.getElementById("modalTitle").textContent = "Thêm món mới";
+    document.getElementById("trangThaiField").classList.add("hidden");
+    monModal.classList.remove("hidden");
+  });
+
+  function openEditModal(mon) {
+    resetForm();
+    document.getElementById("modalTitle").textContent = "Sửa món ăn";
+    document.getElementById("trangThaiField").classList.remove("hidden");
+    document.getElementById("editMaMon").value = mon.maMon;
+    document.getElementById("fTenMon").value = mon.tenMon;
+    document.getElementById("fDonGia").value = mon.donGia;
+    document.getElementById("fMoTa").value = mon.moTa || "";
+    document.getElementById("fHinhAnh").value = mon.hinhAnh || "";
+    document.getElementById("fTrangThai").value = mon.trangThai;
+    monModal.classList.remove("hidden");
+  }
+
+  document.getElementById("btnCloseModal").addEventListener("click", () => monModal.classList.add("hidden"));
+
+  document.getElementById("btnSaveMon").addEventListener("click", async () => {
+    const maMon = document.getElementById("editMaMon").value;
+    const modalAlert = document.getElementById("modalAlert");
+    const tenMon = document.getElementById("fTenMon").value.trim();
+    const donGia = parseFloat(document.getElementById("fDonGia").value);
+    const moTa = document.getElementById("fMoTa").value.trim();
+    const hinhAnh = document.getElementById("fHinhAnh").value.trim();
+    const trangThai = document.getElementById("fTrangThai").value;
+
+    if (!tenMon || !donGia || donGia <= 0) {
+      modalAlert.innerHTML = '<div class="alert alert-error">Vui lòng nhập tên món và đơn giá hợp lệ.</div>';
+      return;
+    }
+
+    try {
+      if (maMon) {
+        await apiFetch(`/admin/mon-an/${maMon}`, {
+          method: "PUT",
+          body: JSON.stringify({ tenMon, donGia, moTa, hinhAnh, trangThai }),
+        });
+      } else {
+        await apiFetch("/admin/mon-an", {
+          method: "POST",
+          body: JSON.stringify({ tenMon, donGia, moTa, hinhAnh }),
+        });
+      }
+      monModal.classList.add("hidden");
+      loadMenu();
+    } catch (err) {
+      modalAlert.innerHTML = `<div class="alert alert-error">${err.message}</div>`;
+    }
+  });
+
+  document.getElementById("btnCancelDelete").addEventListener("click", () => document.getElementById("deleteModal").classList.add("hidden"));
+  document.getElementById("btnConfirmDelete").addEventListener("click", async () => {
+    try {
+      await apiFetch(`/admin/mon-an/${pendingDeleteId}`, { method: "DELETE" });
+      document.getElementById("deleteModal").classList.add("hidden");
+      loadMenu();
+    } catch (err) {
+      alert(err.message);
+    }
+  });
+</script>
+</body>
+</html>
