@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Thực đơn - Uông Bí GO</title>
+<link rel="icon" href="favicon.ico" />
+<link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+<div class="topnav">
+  <div class="brand">🍱 Uông Bí GO</div>
+  <nav>
+    <a href="menu.html" class="active">Thực đơn</a>
+    <a href="cart.html">Giỏ hàng <span id="cartBadge" class="badge badge-ok hidden">0</span></a>
+    <a href="orders.html">Đơn của tôi</a>
+  </nav>
+  <div class="userbox">
+    <span id="userName"></span>
+    <span class="role-badge">Sinh viên</span>
+    <button class="btn btn-outline btn-sm" id="btnLogout">Đăng xuất</button>
+  </div>
+</div>
+
+<div class="container">
+  <div class="page-title">Thực đơn hôm nay</div>
+  <p class="page-subtitle">Chọn món yêu thích và thêm vào giỏ hàng. Món đã hết sẽ không thể chọn.</p>
+  <div id="alertBox"></div>
+  <div class="menu-grid" id="menuGrid"></div>
+  <div id="emptyState" class="empty-state hidden">
+    <div class="icon">🍽️</div>
+    <div>Chưa có món ăn nào trong thực đơn.</div>
+  </div>
+</div>
+
+<script src="js/api.js"></script>
+<script src="js/cart.js"></script>
+<script>
+  const user = Auth.requireRole(["ROLE_BUYER"]);
+  if (user) {
+    document.getElementById("userName").textContent = user.hoTen;
+    document.getElementById("btnLogout").addEventListener("click", () => { Auth.clear(); goTo("index.html"); });
+    updateCartBadge();
+    loadMenu();
+  }
+
+  const foodEmoji = ["🍚","🍜","🍲","🥘","🍛","🍝","🍣","🥗","🍤","🍢","🌮","🥪"];
+  function emojiFor(id) { return foodEmoji[id % foodEmoji.length]; }
+
+  async function loadMenu() {
+    const grid = document.getElementById("menuGrid");
+    const alertBox = document.getElementById("alertBox");
+    try {
+      const items = await apiFetch("/menu");
+      grid.innerHTML = "";
+      document.getElementById("emptyState").classList.toggle("hidden", items.length > 0);
+      items.forEach((mon) => grid.appendChild(renderCard(mon)));
+    } catch (err) {
+      alertBox.innerHTML = `<div class="alert alert-error">${err.message || "Không tải được thực đơn"}</div>`;
+    }
+  }
+
+  function renderCard(mon) {
+    const outOfStock = mon.trangThai === "HET_HANG";
+    const card = document.createElement("div");
+    card.className = "food-card" + (outOfStock ? " out-of-stock" : "");
+    card.innerHTML = `
+      <div class="thumb">${mon.hinhAnh ? `<img src="${mon.hinhAnh}" alt="${mon.tenMon}"/>` : emojiFor(mon.maMon)}</div>
+      <div class="body">
+        <div class="flex-between">
+          <h3>${mon.tenMon}</h3>
+          ${outOfStock ? '<span class="badge badge-out">HẾT HÀNG</span>' : '<span class="badge badge-ok">Còn hàng</span>'}
+        </div>
+        <div class="desc">${mon.moTa || ""}</div>
+        <div class="price">${formatCurrency(mon.donGia)}</div>
+        ${outOfStock
+          ? '<button class="btn btn-outline btn-block" disabled>Hết hàng</button>'
+          : `<div class="qty-row">
+               <input type="number" min="1" value="1" id="qty-${mon.maMon}" />
+               <button class="btn btn-primary" style="flex:1" data-add="${mon.maMon}">Thêm vào giỏ</button>
+             </div>`
+        }
+      </div>
+    `;
+    if (!outOfStock) {
+      card.querySelector("[data-add]").addEventListener("click", () => {
+        const qtyInput = document.getElementById(`qty-${mon.maMon}`);
+        const soLuong = Math.max(1, parseInt(qtyInput.value || "1", 10));
+        Cart.add(mon, soLuong);
+        updateCartBadge();
+        qtyInput.value = 1;
+      });
+    }
+    return card;
+  }
+
+  // Risk #5 - Khi mang ket noi lai, tu dong lam moi thuc don de dong bo trang thai moi nhat
+  window.addEventListener("ubg:reconnected", loadMenu);
+</script>
+</body>
+</html>

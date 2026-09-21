@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Đơn của tôi - Uông Bí GO</title>
+<link rel="icon" href="favicon.ico" />
+<link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+<div class="topnav">
+  <div class="brand">🍱 Uông Bí GO</div>
+  <nav>
+    <a href="menu.html">Thực đơn</a>
+    <a href="cart.html">Giỏ hàng <span id="cartBadge" class="badge badge-ok hidden">0</span></a>
+    <a href="orders.html" class="active">Đơn của tôi</a>
+  </nav>
+  <div class="userbox">
+    <span id="userName"></span>
+    <button class="btn btn-outline btn-sm" id="btnLogout">Đăng xuất</button>
+  </div>
+</div>
+
+<div class="container">
+  <div class="page-title">Đơn hàng của tôi</div>
+  <p class="page-subtitle">Trạng thái được tự động cập nhật mỗi vài giây.</p>
+  <div id="alertBox"></div>
+  <div id="ordersList"></div>
+  <div id="emptyState" class="empty-state hidden">
+    <div class="icon">📦</div>
+    <div>Bạn chưa có đơn hàng nào.</div>
+    <a href="menu.html" class="btn btn-primary" style="margin-top:14px;">Đặt món ngay</a>
+  </div>
+</div>
+
+<script src="js/api.js"></script>
+<script src="js/cart.js"></script>
+<script>
+  const user = Auth.requireRole(["ROLE_BUYER"]);
+  if (user) {
+    document.getElementById("userName").textContent = user.hoTen;
+    document.getElementById("btnLogout").addEventListener("click", () => { Auth.clear(); goTo("index.html"); });
+    updateCartBadge();
+    loadOrders();
+    setInterval(loadOrders, 5000);
+    window.addEventListener("ubg:reconnected", loadOrders);
+  }
+
+  const STEPS = ["CHO_THANH_TOAN", "DA_THANH_TOAN", "DANG_CHUAN_BI", "SAN_SANG_NHAN", "HOAN_THANH"];
+
+  async function loadOrders() {
+    try {
+      const orders = await apiFetch("/donhang/cua-toi");
+      const list = document.getElementById("ordersList");
+      document.getElementById("emptyState").classList.toggle("hidden", orders.length > 0);
+      list.innerHTML = orders.map(renderOrder).join("");
+    } catch (err) {
+      document.getElementById("alertBox").innerHTML = `<div class="alert alert-error">${err.message}</div>`;
+    }
+  }
+
+  function renderOrder(donHang) {
+    const isCancelled = donHang.trangThai === "DA_HUY";
+    const stepIndex = STEPS.indexOf(donHang.trangThai);
+    const items = donHang.chiTietDonHangs.map((ct) => `${ct.tenMon} x${ct.soLuong}`).join(", ");
+
+    let progressHtml = "";
+    if (!isCancelled) {
+      progressHtml = `<div style="display:flex; gap:6px; margin-top:10px;">` +
+        STEPS.map((s, i) => `<div style="flex:1; height:6px; border-radius:3px; background:${i <= stepIndex ? "var(--clr-primary)" : "#e2e8f0"};"></div>`).join("") +
+        `</div>`;
+    }
+
+    return `
+      <div class="section-card">
+        <div class="flex-between">
+          <div>
+            <div style="font-weight:700; font-size:15px;">Đơn ${donHang.maDonRutGon || "#" + donHang.maDonHang} </div>
+            <div class="text-muted" style="font-size:12.5px;">${formatDateTime(donHang.ngayDat)} · Nhận lúc ${formatDateTime(donHang.thoiGianNhan)}</div>
+          </div>
+          ${statusPillHtml(donHang.trangThai)}
+        </div>
+        <div class="text-muted" style="font-size:13.5px; margin-top:10px;">${items}</div>
+        <div class="flex-between" style="margin-top:10px;">
+          <span class="text-muted" style="font-size:13px;">Tổng tiền</span>
+          <span style="font-weight:700;">${formatCurrency(donHang.tongTien)}</span>
+        </div>
+        ${progressHtml}
+      </div>
+    `;
+  }
+</script>
+</body>
+</html>

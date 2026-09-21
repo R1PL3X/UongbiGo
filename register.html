@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Đăng ký - Uông Bí GO</title>
+<link rel="icon" href="favicon.ico" />
+<link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+<div class="auth-wrap">
+  <div class="auth-card">
+    <h1>🍱 Tạo tài khoản</h1>
+    <p class="subtitle">Đăng ký để bắt đầu đặt món tại Uông Bí GO</p>
+
+    <div id="alertBox"></div>
+
+    <form id="registerForm">
+      <div class="field">
+        <label>Họ tên</label>
+        <input type="text" id="hoTen" required placeholder="Nguyễn Văn A" />
+      </div>
+      <div class="field">
+        <label>Email</label>
+        <input type="email" id="email" required placeholder="ban@uongbigo.vn" />
+      </div>
+      <div class="field">
+        <label>Mật khẩu (tối thiểu 6 ký tự)</label>
+        <input type="password" id="matKhau" required minlength="6" placeholder="••••••••" />
+      </div>
+      <div class="field">
+        <label>Vai trò</label>
+        <select id="vaiTro">
+          <option value="ROLE_BUYER">Sinh viên / Nhân viên (Người mua)</option>
+          <option value="ROLE_STAFF">Nhân viên Canteen (KDS)</option>
+        </select>
+      </div>
+      <button type="submit" class="btn btn-primary btn-block" id="btnSubmit">Đăng ký</button>
+    </form>
+
+    <p style="text-align:center; margin: 16px 0 0; font-size:13px;">
+      Đã có tài khoản? <a href="index.html" style="color:var(--clr-primary-dark); font-weight:600;">Đăng nhập</a>
+    </p>
+  </div>
+</div>
+
+<script src="js/api.js"></script>
+<script>
+  const alertBox = document.getElementById("alertBox");
+  document.getElementById("registerForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const btn = document.getElementById("btnSubmit");
+    btn.disabled = true;
+    alertBox.innerHTML = "";
+    try {
+      const payload = {
+        hoTen: document.getElementById("hoTen").value.trim(),
+        email: document.getElementById("email").value.trim(),
+        matKhau: document.getElementById("matKhau").value,
+        vaiTro: document.getElementById("vaiTro").value,
+      };
+      await apiFetch("/auth/register", { method: "POST", body: JSON.stringify(payload) });
+      alertBox.innerHTML = '<div class="alert alert-success">Đăng ký thành công! Đang chuyển đến trang đăng nhập...</div>';
+      setTimeout(() => (goTo("index.html")), 1200);
+    } catch (err) {
+      alertBox.innerHTML = `<div class="alert alert-error">${err.message}</div>`;
+      btn.disabled = false;
+    }
+  });
+</script>
+</body>
+</html>

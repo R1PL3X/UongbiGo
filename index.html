@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Đăng nhập - Uông Bí GO</title>
+<link rel="icon" href="favicon.ico" />
+<link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+<div class="auth-wrap">
+  <div class="auth-card">
+    <h1>🍱 Uông Bí GO</h1>
+    <p class="subtitle">Đăng nhập để đặt món tại căn tin</p>
+
+    <div id="alertBox"></div>
+
+    <form id="loginForm">
+      <div class="field">
+        <label>Email</label>
+        <input type="email" id="email" required placeholder="ban@uongbigo.vn" />
+      </div>
+      <div class="field">
+        <label>Mật khẩu</label>
+        <input type="password" id="matKhau" required placeholder="••••••••" />
+      </div>
+      <button type="submit" class="btn btn-primary btn-block" id="btnSubmit">Đăng nhập</button>
+    </form>
+
+    <p style="text-align:center; margin: 16px 0 0; font-size:13px;">
+      Chưa có tài khoản? <a href="register.html" style="color:var(--clr-primary-dark); font-weight:600;">Đăng ký ngay</a>
+    </p>
+    <p style="text-align:center; margin: 6px 0 0; font-size:13px;">
+      <a href="#" id="forgotLink" style="color:var(--clr-muted);">Quên mật khẩu?</a>
+    </p>
+
+    <div class="demo-accounts">
+      <strong>Tài khoản demo (dữ liệu mẫu có sẵn, chạy 100% trên trình duyệt):</strong><br />
+      Quản lý: admin@uongbigo.vn / Admin@123<br />
+      Nhân viên bếp: bep@uongbigo.vn / Bep@123<br />
+      Sinh viên: sv@uongbigo.vn / sv@123
+    </div>
+  </div>
+</div>
+
+<div id="forgotModal" class="modal-overlay hidden">
+  <div class="modal-box">
+    <h3>Khôi phục mật khẩu</h3>
+    <div class="field">
+      <label>Email đã đăng ký</label>
+      <input type="email" id="forgotEmail" placeholder="ban@uongbigo.vn" />
+    </div>
+    <div id="forgotResult"></div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" id="btnCloseForgot">Đóng</button>
+      <button class="btn btn-primary" id="btnSubmitForgot">Gửi yêu cầu</button>
+    </div>
+  </div>
+</div>
+
+<script src="js/api.js"></script>
+<script>
+  if (Auth.isLoggedIn()) {
+    redirectByRole(Auth.getUser()?.vaiTro);
+  }
+
+  const alertBox = document.getElementById("alertBox");
+  function showAlert(message, type = "error") {
+    alertBox.innerHTML = `<div class="alert alert-${type}">${message}</div>`;
+  }
+
+  document.getElementById("loginForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const btn = document.getElementById("btnSubmit");
+    btn.disabled = true;
+    btn.textContent = "Đang xử lý...";
+    alertBox.innerHTML = "";
+    try {
+      const payload = {
+        email: document.getElementById("email").value.trim(),
+        matKhau: document.getElementById("matKhau").value,
+      };
+      const res = await apiFetch("/auth/login", { method: "POST", body: JSON.stringify(payload) });
+      Auth.setSession(res.accessToken, res.nguoiDung);
+      goTo(res.redirectTo);
+    } catch (err) {
+      showAlert(err.message || "Sai thông tin đăng nhập");
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "Đăng nhập";
+    }
+  });
+
+  const forgotModal = document.getElementById("forgotModal");
+  document.getElementById("forgotLink").addEventListener("click", (e) => {
+    e.preventDefault();
+    document.getElementById("forgotResult").innerHTML = "";
+    forgotModal.classList.remove("hidden");
+  });
+  document.getElementById("btnCloseForgot").addEventListener("click", () => forgotModal.classList.add("hidden"));
+  document.getElementById("btnSubmitForgot").addEventListener("click", async () => {
+    const email = document.getElementById("forgotEmail").value.trim();
+    const resultBox = document.getElementById("forgotResult");
+    if (!email) return;
+    try {
+      const res = await apiFetch("/auth/forgot-password", { method: "POST", body: JSON.stringify({ email }) });
+      let html = `<div class="alert alert-success">${res.message}</div>`;
+      if (res.matKhauTamThoi) {
+        html += `<div class="alert alert-info">Mật khẩu tạm thời (demo, môi trường thật sẽ gửi qua email): <b>${res.matKhauTamThoi}</b></div>`;
+      }
+      resultBox.innerHTML = html;
+    } catch (err) {
+      resultBox.innerHTML = `<div class="alert alert-error">${err.message}</div>`;
+    }
+  });
+</script>
+</body>
+</html>

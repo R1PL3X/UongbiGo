@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>KDS - Uông Bí GO</title>
+<link rel="icon" href="favicon.ico" />
+<link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+<div class="topnav">
+  <div class="brand">👨‍🍳 Uông Bí GO - KDS</div>
+  <nav>
+    <a href="kds.html" class="active">Màn hình bếp</a>
+  </nav>
+  <div class="userbox">
+    <span id="userName"></span>
+    <span class="role-badge">Nhân viên bếp</span>
+    <button class="btn btn-outline btn-sm" id="btnLogout">Đăng xuất</button>
+  </div>
+</div>
+
+<div class="container">
+  <div class="flex-between">
+    <div>
+      <div class="page-title" style="margin-bottom:2px;">Đơn hàng cần chuẩn bị</div>
+      <p class="page-subtitle" style="margin-top:0;">Tự động làm mới mỗi 5 giây, kể cả sau khi mất mạng.</p>
+    </div>
+    <button class="btn btn-outline" id="btnToggleMenu">🍜 Quản lý nhanh Còn/Hết hàng</button>
+  </div>
+
+  <div id="alertBox"></div>
+  <div id="ordersGrid" class="menu-grid" style="grid-template-columns: repeat(auto-fill, minmax(280px,1fr));"></div>
+  <div id="emptyState" class="empty-state hidden">
+    <div class="icon">✅</div>
+    <div>Hiện không có đơn nào cần chuẩn bị.</div>
+  </div>
+</div>
+
+<!-- Modal quan ly nhanh Con/Het hang -->
+<div id="menuModal" class="modal-overlay hidden">
+  <div class="modal-box" style="max-width:520px;">
+    <h3>Quản lý nhanh trạng thái món</h3>
+    <div id="menuToggleList" style="max-height:400px; overflow-y:auto;"></div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" id="btnCloseMenuModal">Đóng</button>
+    </div>
+  </div>
+</div>
+
+<script src="js/api.js"></script>
+<script>
+  const user = Auth.requireRole(["ROLE_STAFF", "ROLE_ADMIN"]);
+  if (user) {
+    document.getElementById("userName").textContent = user.hoTen;
+    document.getElementById("btnLogout").addEventListener("click", () => { Auth.clear(); goTo("index.html"); });
+    loadOrders();
+    setInterval(loadOrders, 5000);
+    window.addEventListener("ubg:reconnected", loadOrders);
+  }
+
+  const NEXT_ACTION = {
+    DA_THANH_TOAN: { label: "Bắt đầu chuẩn bị", next: "DANG_CHUAN_BI" },
+    DANG_CHUAN_BI: { label: "Sẵn sàng nhận", next: "SAN_SANG_NHAN" },
+    SAN_SANG_NHAN: { label: "Hoàn thành (đã giao khách)", next: "HOAN_THANH" },
+  };
+
+  async function loadOrders() {
+    try {
+      const orders = await apiFetch("/kds/orders");
+      const grid = document.getElementById("ordersGrid");
+      document.getElementById("emptyState").classList.toggle("hidden", orders.length > 0);
+      grid.innerHTML = orders.map(renderOrderCard).join("");
+      grid.querySelectorAll("[data-advance]").forEach((btn) => {
+        btn.addEventListener("click", () => advanceOrder(btn.dataset.advance, btn.dataset.next));
+      });
+    } catch (err) {
+      document.getElementById("alertBox").innerHTML = `<div class="alert alert-error">${err.message}</div>`;
+    }
+  }
+
+  function renderOrderCard(donHang) {
+    const items = donHang.chiTietDonHangs.map((ct) => `<li>${ct.tenMon} <b>x${ct.soLuong}</b></li>`).join("");
+    const action = NEXT_ACTION[donHang.trangThai];
+    return `
+      <div class="section-card" style="margin-bottom:0;">
+        <div class="flex-between">
+          <div style="font-weight:700;">${donHang.maDonRutGon || "#" + donHang.maDonHang}</div>
+          ${statusPillHtml(donHang.trangThai)}
+        </div>
+        <div class="text-muted" style="font-size:12px; margin:4px 0 8px;">Nhận lúc ${formatDateTime(donHang.thoiGianNhan)}</div>
+        <ul style="margin:0 0 12px; padding-left:18px; font-size:13.5px;">${items}</ul>
+        ${action ? `<button class="btn btn-primary btn-block" data-advance="${donHang.maDonHang}" data-next="${action.next}">${action.label}</button>` : ""}
+      </div>
+    `;
+  }
+
+  async function advanceOrder(maDonHang, trangThaiMoi) {
+    try {
+      await apiFetch(`/kds/orders/${maDonHang}/status`, {
+        method: "PATCH",
+        body: JSON.stringify({ trangThaiMoi }),
+      });
+      loadOrders();
+    } catch (err) {
+      alert(err.message);
+    }
+  }
+
+  // ---------- Modal quan ly nhanh Con/Het hang (US16) ----------
+  const menuModal = document.getElementById("menuModal");
+  document.getElementById("btnToggleMenu").addEventListener("click", async () => {
+    menuModal.classList.remove("hidden");
+    await loadMenuToggleList();
+  });
+  document.getElementById("btnCloseMenuModal").addEventListener("click", () => menuModal.classList.add("hidden"));
+
+  async function loadMenuToggleList() {
+    const box = document.getElementById("menuToggleList");
+    box.innerHTML = "Đang tải...";
+    try {
+      const items = await apiFetch("/menu");
+      box.innerHTML = items.map((mon) => `
+        <div class="flex-between" style="padding:10px 0; border-bottom:1px solid var(--clr-border);">
+          <span>${mon.tenMon}</span>
+          <button class="toggle-switch ${mon.trangThai === "CON_HANG" ? "on" : ""}" data-toggle="${mon.maMon}"></button>
+        </div>
+      `).join("");
+      box.querySelectorAll("[data-toggle]").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          try {
+            await apiFetch(`/kds/mon/${btn.dataset.toggle}/toggle`, { method: "PATCH" });
+            btn.classList.toggle("on");
+          } catch (err) { alert(err.message); }
+        });
+      });
+    } catch (err) {
+      box.innerHTML = `<div class="alert alert-error">${err.message}</div>`;
+    }
+  }
+</script>
+</body>
+</html>

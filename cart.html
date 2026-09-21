@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Giỏ hàng - Uông Bí GO</title>
+<link rel="icon" href="favicon.ico" />
+<link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+<div class="topnav">
+  <div class="brand">🍱 Uông Bí GO</div>
+  <nav>
+    <a href="menu.html">Thực đơn</a>
+    <a href="cart.html" class="active">Giỏ hàng <span id="cartBadge" class="badge badge-ok hidden">0</span></a>
+    <a href="orders.html">Đơn của tôi</a>
+  </nav>
+  <div class="userbox">
+    <span id="userName"></span>
+    <button class="btn btn-outline btn-sm" id="btnLogout">Đăng xuất</button>
+  </div>
+</div>
+
+<div class="container" style="max-width:720px;">
+  <div class="page-title">Giỏ hàng của bạn</div>
+  <div id="alertBox"></div>
+
+  <div id="cartList"></div>
+
+  <div id="emptyCart" class="empty-state hidden">
+    <div class="icon">🛒</div>
+    <div>Giỏ hàng đang trống.</div>
+    <a href="menu.html" class="btn btn-primary" style="margin-top:14px;">Xem thực đơn</a>
+  </div>
+
+  <div id="checkoutBox" class="section-card hidden">
+    <h2>Thông tin nhận món</h2>
+    <div class="field">
+      <label>Chọn khung giờ nhận món (giờ hoạt động 07:00 - 18:00)</label>
+      <input type="time" id="thoiGianNhan" min="07:00" max="18:00" />
+    </div>
+    <div class="flex-between" style="margin-top:16px; font-size:16px; font-weight:700;">
+      <span>Tổng tiền</span>
+      <span class="price" id="totalAmount">0đ</span>
+    </div>
+    <button class="btn btn-primary btn-block" id="btnCheckout" style="margin-top:16px;">Xác nhận đặt hàng</button>
+  </div>
+</div>
+
+<!-- Modal QR thanh toan -->
+<div id="qrModal" class="modal-overlay hidden">
+  <div class="modal-box qr-box">
+    <h3>Thanh toán đơn hàng</h3>
+    <p class="text-muted" id="qrOrderInfo"></p>
+    <img id="qrImage" src="" alt="QR thanh toán" />
+    <div class="amount" id="qrAmount"></div>
+    <div class="countdown" id="qrCountdown"></div>
+    <div id="qrResultBox"></div>
+    <div class="modal-actions" style="justify-content:center; flex-wrap:wrap;">
+      <button class="btn btn-success" id="btnSimulateSuccess">✅ Giả lập thanh toán thành công</button>
+      <button class="btn btn-danger" id="btnSimulateFail">❌ Giả lập thất bại</button>
+    </div>
+    <p style="font-size:11.5px; color:var(--clr-muted); margin-top:14px;">
+      * Đây là mock/giả lập cổng thanh toán VietQR/Momo cho môi trường demo.
+    </p>
+  </div>
+</div>
+
+<script src="js/api.js"></script>
+<script src="js/cart.js"></script>
+<script>
+  const user = Auth.requireRole(["ROLE_BUYER"]);
+  let paymentTimer = null;
+  let currentThanhToan = null;
+
+  if (user) {
+    document.getElementById("userName").textContent = user.hoTen;
+    document.getElementById("btnLogout").addEventListener("click", () => { Auth.clear(); goTo("index.html"); });
+    updateCartBadge();
+    renderCart();
+  }
+
+  function renderCart() {
+    const items = Cart.getItems();
+    const list = document.getElementById("cartList");
+    const checkoutBox = document.getElementById("checkoutBox");
+    document.getElementById("emptyCart").classList.toggle("hidden", items.length > 0);
+    checkoutBox.classList.toggle("hidden", items.length === 0);
+
+    if (items.length === 0) { list.innerHTML = ""; return; }
+
+    list.innerHTML = items.map((item) => `
+      <div class="section-card" style="display:flex; align-items:center; gap:14px; padding:14px 18px;">
+        <div style="flex:1;">
+          <div style="font-weight:600;">${item.tenMon}</div>
+          <div class="text-muted" style="font-size:13px;">${formatCurrency(item.donGia)} / phần</div>
+        </div>
+        <input type="number" min="0" value="${item.soLuong}" style="width:64px; padding:6px; border:1px solid var(--clr-border); border-radius:6px;" data-qty="${item.maMon}" />
+        <div style="width:100px; text-align:right; font-weight:700;">${formatCurrency(item.donGia * item.soLuong)}</div>
+        <button class="btn btn-danger btn-sm" data-remove="${item.maMon}">Xóa</button>
+      </div>
+    `).join("");
+
+    list.querySelectorAll("[data-qty]").forEach((input) => {
+      input.addEventListener("change", () => {
+        Cart.updateQty(parseInt(input.dataset.qty, 10), Math.max(0, parseInt(input.value || "0", 10)));
+        updateCartBadge();
+        renderCart();
+      });
+    });
+    list.querySelectorAll("[data-remove]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        Cart.remove(parseInt(btn.dataset.remove, 10));
+        updateCartBadge();
+        renderCart();
+      });
+    });
+
+    document.getElementById("totalAmount").textContent = formatCurrency(Cart.totalAmount());
+  }
+
+  document.getElementById("btnCheckout").addEventListener("click", async () => {
+    const alertBox = document.getElementById("alertBox");
+    alertBox.innerHTML = "";
+    const timeVal = document.getElementById("thoiGianNhan").value; // "HH:MM"
+    if (!timeVal) {
+      alertBox.innerHTML = '<div class="alert alert-error">Vui lòng chọn khung giờ nhận món.</div>';
+      return;
+    }
+    const [h, m] = timeVal.split(":").map(Number);
+    const now = new Date();
+    let pickup = new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, m, 0);
+    if (pickup < now) pickup = new Date(pickup.getTime() + 24 * 60 * 60 * 1000); // qua gio hom nay -> tinh cho ngay mai
+
+    const items = Cart.getItems().map((i) => ({ maMon: i.maMon, soLuong: i.soLuong }));
+    const btn = document.getElementById("btnCheckout");
+    btn.disabled = true;
+    btn.textContent = "Đang xử lý...";
+    try {
+      const donHang = await apiFetch("/donhang", {
+        method: "POST",
+        body: JSON.stringify({ items, thoiGianNhan: pickup.toISOString() }),
+      });
+      Cart.clear();
+      updateCartBadge();
+      await openPaymentModal(donHang.maDonHang, donHang.tongTien);
+    } catch (err) {
+      alertBox.innerHTML = `<div class="alert alert-error">${err.message}</div>`;
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "Xác nhận đặt hàng";
+    }
+  });
+
+  async function openPaymentModal(maDonHang, tongTien) {
+    const modal = document.getElementById("qrModal");
+    document.getElementById("qrResultBox").innerHTML = "";
+    document.getElementById("qrOrderInfo").textContent = `Đơn hàng #${maDonHang}`;
+    modal.classList.remove("hidden");
+    try {
+      const thanhToan = await apiFetch(`/thanhtoan/${maDonHang}/qr?phuongThuc=VIETQR`, { method: "POST" });
+      currentThanhToan = thanhToan;
+      document.getElementById("qrImage").src = thanhToan.qrImageBase64;
+      document.getElementById("qrAmount").textContent = formatCurrency(thanhToan.soTien);
+      startCountdown(thanhToan.thoiHanThanhToan);
+    } catch (err) {
+      document.getElementById("qrResultBox").innerHTML = `<div class="alert alert-error">${err.message}</div>`;
+    }
+  }
+
+  function startCountdown(expiryIso) {
+    clearInterval(paymentTimer);
+    const expiry = new Date(expiryIso).getTime();
+    const el = document.getElementById("qrCountdown");
+    function tick() {
+      const diff = Math.max(0, Math.floor((expiry - Date.now()) / 1000));
+      const mm = String(Math.floor(diff / 60)).padStart(2, "0");
+      const ss = String(diff % 60).padStart(2, "0");
+      el.textContent = diff > 0 ? `QR hết hạn sau ${mm}:${ss}` : "QR đã hết hạn - đơn hàng sẽ tự động bị hủy";
+      if (diff <= 0) clearInterval(paymentTimer);
+    }
+    tick();
+    paymentTimer = setInterval(tick, 1000);
+  }
+
+  async function guiKetQuaThanhToan(ketQua) {
+    if (!currentThanhToan) return;
+    const resultBox = document.getElementById("qrResultBox");
+    try {
+      const donHang = await apiFetch("/thanhtoan/webhook", {
+        method: "POST",
+        body: JSON.stringify({ maDonHang: currentThanhToan.maDonHang, maQr: currentThanhToan.maQr, ketQua }),
+      });
+      clearInterval(paymentTimer);
+      if (donHang.trangThai === "DA_THANH_TOAN") {
+        resultBox.innerHTML = `<div class="alert alert-success">Thanh toán thành công! Mã đơn của bạn: <b>${donHang.maDonRutGon}</b></div>`;
+        setTimeout(() => (goTo("orders.html")), 1500);
+      } else {
+        resultBox.innerHTML = '<div class="alert alert-error">Thanh toán thất bại. Bạn có thể thử lại.</div>';
+      }
+    } catch (err) {
+      resultBox.innerHTML = `<div class="alert alert-error">${err.message}</div>`;
+    }
+  }
+
+  document.getElementById("btnSimulateSuccess").addEventListener("click", () => guiKetQuaThanhToan("THANH_CONG"));
+  document.getElementById("btnSimulateFail").addEventListener("click", () => guiKetQuaThanhToan("THAT_BAI"));
+</script>
+</body>
+</html>
