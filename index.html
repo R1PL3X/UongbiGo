@@ -3,43 +3,59 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Đăng nhập - Uông Bí GO</title>
+<title>CanteenGo · Đặt món</title>
 <link rel="icon" href="favicon.ico" />
 <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
 <div class="auth-wrap">
-  <div class="auth-card">
-    <h1>🍱 Uông Bí GO</h1>
-    <p class="subtitle">Đăng nhập để đặt món tại căn tin</p>
-
-    <div id="alertBox"></div>
-
-    <form id="loginForm">
-      <div class="field">
-        <label>Email</label>
-        <input type="email" id="email" required placeholder="ban@uongbigo.vn" />
-      </div>
-      <div class="field">
-        <label>Mật khẩu</label>
-        <input type="password" id="matKhau" required placeholder="••••••••" />
-      </div>
-      <button type="submit" class="btn btn-primary btn-block" id="btnSubmit">Đăng nhập</button>
-    </form>
-
-    <p style="text-align:center; margin: 16px 0 0; font-size:13px;">
-      Chưa có tài khoản? <a href="register.html" style="color:var(--clr-primary-dark); font-weight:600;">Đăng ký ngay</a>
-    </p>
-    <p style="text-align:center; margin: 6px 0 0; font-size:13px;">
-      <a href="#" id="forgotLink" style="color:var(--clr-muted);">Quên mật khẩu?</a>
-    </p>
-    <div class="demo-accounts">
-    <br />
-      Quản lý: admin@uongbigo.vn / Admin@123<br />
-      Nhân viên bếp: bep@uongbigo.vn / Bep@123<br />
-      Sinh viên: sv@uongbigo.vn / sv@123
+  <section class="auth-brand-pane">
+    <div style="position:absolute;left:58px;top:50px;right:58px;display:flex;justify-content:space-between;align-items:center;z-index:2;">
+      <div class="auth-brand-mark"><span class="seal">CG</span> CANTEENGO</div>
+      <a class="btn btn-gold" href="demo.html">Xem demo giao diện</a>
     </div>
-  </div>
+    <div class="auth-brand-copy">
+      <div class="eyebrow">Đặt món thông minh · Nhận món đúng giờ</div>
+      <h1>Ăn ngon,<br/>đặt trước.</h1>
+      <p>Giao diện CanteenGo được làm mới theo tinh thần nhà hàng Việt cao cấp: xanh ngọc, nền kem, điểm nhấn vàng champagne và kiểu chữ serif thanh lịch.</p>
+    </div>
+  </section>
+
+  <section class="auth-form-pane">
+    <div class="auth-card">
+      <div class="auth-kicker">Chào mừng trở lại</div>
+      <h1>Đăng nhập</h1>
+      <p class="subtitle">Đăng nhập để đặt món và theo dõi đơn hàng.</p>
+
+      <div id="alertBox"></div>
+
+      <form id="loginForm">
+        <div class="field">
+          <label>Email</label>
+          <input type="email" id="email" required placeholder="ban@uongbigo.vn" autocomplete="email" />
+        </div>
+        <div class="field">
+          <label>Mật khẩu</label>
+          <input type="password" id="matKhau" required placeholder="••••••••" autocomplete="current-password" />
+        </div>
+        <button type="submit" class="btn btn-primary btn-block" id="btnSubmit">Đăng nhập</button>
+      </form>
+
+      <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;margin-top:17px;font-size:12px;">
+        <span>Chưa có tài khoản? <a href="register.html" style="font-weight:700;">Đăng ký</a></span>
+        <a href="#" id="forgotLink" style="color:var(--muted)!important;">Quên mật khẩu?</a>
+      </div>
+
+      <a class="demo-link" href="demo.html">→ Xem trước toàn bộ giao diện trước khi kết nối database</a>
+
+      <div class="demo-accounts">
+        <strong>Tài khoản demo:</strong><br />
+        Quản trị · <button type="button" class="demo-account" data-email="admin@uongbigo.vn" data-password="Admin@123">dùng tài khoản quản trị</button><br />
+        Bếp · <button type="button" class="demo-account" data-email="bep@uongbigo.vn" data-password="Bep@123">dùng tài khoản bếp</button><br />
+        Người mua · <button type="button" class="demo-account" data-email="sv@uongbigo.vn" data-password="sv@123">dùng tài khoản người mua</button>
+      </div>
+    </div>
+  </section>
 </div>
 
 <div id="forgotModal" class="modal-overlay hidden">
@@ -59,58 +75,48 @@
 
 <script src="js/api.js"></script>
 <script>
-  if (Auth.isLoggedIn()) {
-    redirectByRole(Auth.getUser()?.vaiTro);
-  }
+  if (Auth.isLoggedIn()) redirectByRole(Auth.getUser()?.vaiTro);
 
   const alertBox = document.getElementById("alertBox");
-  function showAlert(message, type = "error") {
-    alertBox.innerHTML = `<div class="alert alert-${type}">${message}</div>`;
-  }
+  function showAlert(message, type = "error") { alertBox.innerHTML = `<div class="alert alert-${type}">${message}</div>`; }
+
+  document.querySelectorAll(".demo-account").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      document.getElementById("email").value = btn.dataset.email;
+      document.getElementById("matKhau").value = btn.dataset.password;
+      showAlert("Đã điền tài khoản demo. Bấm Đăng nhập để thử hệ thống.", "info");
+    });
+  });
 
   document.getElementById("loginForm").addEventListener("submit", async (e) => {
     e.preventDefault();
     const btn = document.getElementById("btnSubmit");
-    btn.disabled = true;
-    btn.textContent = "Đang xử lý...";
-    alertBox.innerHTML = "";
+    btn.disabled = true; btn.textContent = "Đang xử lý..."; alertBox.innerHTML = "";
     try {
-      const payload = {
-        email: document.getElementById("email").value.trim(),
-        matKhau: document.getElementById("matKhau").value,
-      };
-      const res = await apiFetch("/auth/login", { method: "POST", body: JSON.stringify(payload) });
+      const res = await apiFetch("/auth/login", {
+        method: "POST",
+        body: JSON.stringify({
+          email: document.getElementById("email").value.trim(),
+          matKhau: document.getElementById("matKhau").value,
+        })
+      });
       Auth.setSession(res.accessToken, res.nguoiDung);
       goTo(res.redirectTo);
     } catch (err) {
       showAlert(err.message || "Sai thông tin đăng nhập");
     } finally {
-      btn.disabled = false;
-      btn.textContent = "Đăng nhập";
+      btn.disabled = false; btn.textContent = "Đăng nhập";
     }
   });
 
   const forgotModal = document.getElementById("forgotModal");
-  document.getElementById("forgotLink").addEventListener("click", (e) => {
-    e.preventDefault();
-    document.getElementById("forgotResult").innerHTML = "";
-    forgotModal.classList.remove("hidden");
-  });
+  document.getElementById("forgotLink").addEventListener("click", (e) => { e.preventDefault(); document.getElementById("forgotResult").innerHTML = ""; forgotModal.classList.remove("hidden"); });
   document.getElementById("btnCloseForgot").addEventListener("click", () => forgotModal.classList.add("hidden"));
   document.getElementById("btnSubmitForgot").addEventListener("click", async () => {
-    const email = document.getElementById("forgotEmail").value.trim();
-    const resultBox = document.getElementById("forgotResult");
+    const email = document.getElementById("forgotEmail").value.trim(), resultBox = document.getElementById("forgotResult");
     if (!email) return;
-    try {
-      const res = await apiFetch("/auth/forgot-password", { method: "POST", body: JSON.stringify({ email }) });
-      let html = `<div class="alert alert-success">${res.message}</div>`;
-      if (res.matKhauTamThoi) {
-        html += `<div class="alert alert-info">Mật khẩu tạm thời (demo, môi trường thật sẽ gửi qua email): <b>${res.matKhauTamThoi}</b></div>`;
-      }
-      resultBox.innerHTML = html;
-    } catch (err) {
-      resultBox.innerHTML = `<div class="alert alert-error">${err.message}</div>`;
-    }
+    try { const res = await apiFetch("/auth/forgot-password", { method: "POST", body: JSON.stringify({ email }) }); resultBox.innerHTML = `<div class="alert alert-success">${res.message}</div>`; }
+    catch (err) { resultBox.innerHTML = `<div class="alert alert-error">${err.message}</div>`; }
   });
 </script>
 </body>
