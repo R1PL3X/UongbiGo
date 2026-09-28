@@ -6,6 +6,8 @@
 <title>CanteenGo · Đặt món</title>
 <link rel="icon" href="favicon.ico" />
 <link rel="stylesheet" href="css/style.css" />
+<!-- 1. Nhúng thư viện Supabase qua CDN (không cần Node.js) -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
 <div class="auth-wrap">
@@ -47,8 +49,6 @@
       </div>
 
       <a class="demo-link" href="demo.html">→ Xem trước toàn bộ giao diện trước khi kết nối database</a>
-
-      
     </div>
   </section>
 </div>
@@ -68,50 +68,82 @@
   </div>
 </div>
 
-<script src="js/api.js"></script>
 <script>
-  if (Auth.isLoggedIn()) redirectByRole(Auth.getUser()?.vaiTro);
+  // 2. Cấu hình kết nối Supabase
+  const SUPABASE_URL = "https://cdclmldpfydbmhuedagn.supabase.co";
+  const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNkY2xtbGRwZnlkYm1odWVkYWduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA1NDg0MjgsImV4cCI6MjEwNjEyNDQyOH0.tLOr_8hb2JxKAleZaZQr1BAiiszYmvx_ZVrEM6C5ydY"; // Lấy từ Project Settings -> API
+
+  const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
   const alertBox = document.getElementById("alertBox");
-  function showAlert(message, type = "error") { alertBox.innerHTML = `<div class="alert alert-${type}">${message}</div>`; }
+  function showAlert(message, type = "error") { 
+    alertBox.innerHTML = `<div class="alert alert-${type}">${message}</div>`; 
+  }
 
-  document.querySelectorAll(".demo-account").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      document.getElementById("email").value = btn.dataset.email;
-      document.getElementById("matKhau").value = btn.dataset.password;
-      showAlert("Đã điền tài khoản demo. Bấm Đăng nhập để thử hệ thống.", "info");
-    });
-  });
+  // Tự động kiểm tra nếu đã đăng nhập từ trước
+  async function checkSession() {
+    const { data: { session } } = await supabaseClient.auth.getSession();
+    if (session) {
+      window.location.href = "demo.html"; // Chuyển trang nếu đã đăng nhập
+    }
+  }
+  checkSession();
 
+  // Xử lý sự kiện Đăng nhập
   document.getElementById("loginForm").addEventListener("submit", async (e) => {
     e.preventDefault();
     const btn = document.getElementById("btnSubmit");
-    btn.disabled = true; btn.textContent = "Đang xử lý..."; alertBox.innerHTML = "";
+    btn.disabled = true; 
+    btn.textContent = "Đang xử lý..."; 
+    alertBox.innerHTML = "";
+
+    const email = document.getElementById("email").value.trim();
+    const matKhau = document.getElementById("matKhau").value;
+
     try {
-      const res = await apiFetch("/auth/login", {
-        method: "POST",
-        body: JSON.stringify({
-          email: document.getElementById("email").value.trim(),
-          matKhau: document.getElementById("matKhau").value,
-        })
+      // Đăng nhập trực tiếp qua Supabase Auth
+      const { data, error } = await supabaseClient.auth.signInWithPassword({
+        email: email,
+        password: matKhau,
       });
-      Auth.setSession(res.accessToken, res.nguoiDung);
-      goTo(res.redirectTo);
+
+      if (error) throw error;
+
+      showAlert("Đăng nhập thành công!", "success");
+      setTimeout(() => {
+        window.location.href = "demo.html"; // Chuyển đến trang chính sau khi đăng nhập thành công
+      }, 1000);
+
     } catch (err) {
       showAlert(err.message || "Sai thông tin đăng nhập");
     } finally {
-      btn.disabled = false; btn.textContent = "Đăng nhập";
+      btn.disabled = false; 
+      btn.textContent = "Đăng nhập";
     }
   });
 
+  // Xử lý Quên mật khẩu
   const forgotModal = document.getElementById("forgotModal");
-  document.getElementById("forgotLink").addEventListener("click", (e) => { e.preventDefault(); document.getElementById("forgotResult").innerHTML = ""; forgotModal.classList.remove("hidden"); });
+  document.getElementById("forgotLink").addEventListener("click", (e) => { 
+    e.preventDefault(); 
+    document.getElementById("forgotResult").innerHTML = ""; 
+    forgotModal.classList.remove("hidden"); 
+  });
+  
   document.getElementById("btnCloseForgot").addEventListener("click", () => forgotModal.classList.add("hidden"));
+  
   document.getElementById("btnSubmitForgot").addEventListener("click", async () => {
-    const email = document.getElementById("forgotEmail").value.trim(), resultBox = document.getElementById("forgotResult");
+    const email = document.getElementById("forgotEmail").value.trim();
+    const resultBox = document.getElementById("forgotResult");
     if (!email) return;
-    try { const res = await apiFetch("/auth/forgot-password", { method: "POST", body: JSON.stringify({ email }) }); resultBox.innerHTML = `<div class="alert alert-success">${res.message}</div>`; }
-    catch (err) { resultBox.innerHTML = `<div class="alert alert-error">${err.message}</div>`; }
+
+    try {
+      const { error } = await supabaseClient.auth.resetPasswordForEmail(email);
+      if (error) throw error;
+      resultBox.innerHTML = `<div class="alert alert-success">Email khôi phục đã được gửi! Vui lòng kiểm tra hộp thư.</div>`;
+    } catch (err) {
+      resultBox.innerHTML = `<div class="alert alert-error">${err.message}</div>`;
+    }
   });
 </script>
 </body>
